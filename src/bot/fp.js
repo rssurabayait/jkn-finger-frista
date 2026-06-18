@@ -62,10 +62,6 @@ export async function scan(cfg, instance, params) {
 	const already = await ensureWindow(cfg);
 
 	await bot.winMove(cfg.WIN_TITLE, '', left, top);
-	if (!already) {
-		await bot.winWait(cfg.WIN_TITLE);
-		await bot.winSetState(cfg.WIN_TITLE, '', 4);
-	}
 	await bot.winActivate(cfg.WIN_TITLE);
 
 	if (simrs) {

@@ -24,16 +24,6 @@ export class ValidationError extends AppError {
 	}
 }
 
-export class NotFoundError extends AppError {
-	/**
-	 * @param {string} message
-	 * @param {{ code?: string; cause?: unknown }} [opts]
-	 */
-	constructor(message, opts = {}) {
-		super(message, { ...opts, status: 404, code: opts.code || 'NOT_FOUND' });
-	}
-}
-
 export class BotError extends AppError {
 	/**
 	 * @param {string} message

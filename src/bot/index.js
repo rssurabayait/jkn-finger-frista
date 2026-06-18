@@ -46,7 +46,9 @@ export async function handle(params) {
 
 	const targetKey = /** @type {'fp'|'frista'} */ (target);
 	const module = handlers[targetKey];
-	const fn = module[/** @type {keyof typeof module} */ (/** @type {any} */ (action))];
+	// Map action snake_case → camelCase (test_load → testLoad)
+	const camelAction = action.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+	const fn = module[/** @type {keyof typeof module} */ (/** @type {any} */ (camelAction))];
 	if (typeof fn !== 'function') {
 		throw new BotError(`Handler untuk target=${target} action=${action} tidak ada`);
 	}

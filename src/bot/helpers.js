@@ -35,7 +35,7 @@ export function formatError(e) {
  * @param {string} winTitle
  * @returns {Promise<boolean>}
  */
-export async function isWindowOpen(winTitle) {
+async function isWindowOpen(winTitle) {
 	return Boolean(await bot.winExists(winTitle));
 }
 
@@ -44,18 +44,26 @@ export async function isWindowOpen(winTitle) {
  * Kalau belum ada, jalankan path installer dan tunggu sampai ready.
  *
  * @param {{ WIN_TITLE: string; INS_PATH: string }} cfg
+ * @param {{ timeout?: number }} [opts]  timeout dalam detik (default 30)
  * @returns {Promise<boolean>} true kalau sudah terbuka sebelum call
  */
-export async function ensureWindow(cfg) {
+export async function ensureWindow(cfg, opts) {
+	const timeout = opts?.timeout ?? 30;
 	const already = await isWindowOpen(cfg.WIN_TITLE);
 	if (!already) {
 		logger.info(`[${cfg.WIN_TITLE}] window belum ada, membuka ${cfg.INS_PATH}`);
 		await bot.run(cfg.INS_PATH);
-		await bot.winWait(cfg.WIN_TITLE);
+		await bot.winWait(cfg.WIN_TITLE, '', timeout);
 		await bot.winSetState(cfg.WIN_TITLE, '', 4);
 	}
 	await bot.winActivate(cfg.WIN_TITLE);
-	await bot.winWaitActive(cfg.WIN_TITLE);
+	try {
+		await bot.winWaitActive(cfg.WIN_TITLE, '', timeout);
+	} catch {
+		logger.warn(`[${cfg.WIN_TITLE}] winWaitActive timeout — coba activate ulang`);
+		await bot.winActivate(cfg.WIN_TITLE);
+		await delay(500);
+	}
 	return already;
 }
 
@@ -109,43 +117,13 @@ export async function forceClose(cfg) {
 }
 
 /**
- * Klik mouse pada koordinat RELATIF terhadap window title.
- * Offset (0,0) atau undefined = skip dengan warning.
- *
- * @param {{ WIN_TITLE: string }} cfg
- * @param {{ x: number, y: number } | undefined} offset
- * @param {string} label  nama field (untuk log)
- * @returns {Promise<boolean>} true kalau klik dilakukan
- */
-export async function clickOffset(cfg, offset, label = 'unknown') {
-	if (!offset || (offset.x === 0 && offset.y === 0)) {
-		logger.warn(`[${cfg.WIN_TITLE}] offset ${label} belum dikonfigurasi (0,0) — skip klik`);
-		return false;
-	}
-	const pos = await bot.winGetPos(cfg.WIN_TITLE);
-	if (!pos) {
-		logger.warn(`[${cfg.WIN_TITLE}] window tidak ditemukan saat akan klik ${label}`);
-		return false;
-	}
-	const absX = pos.left + offset.x;
-	const absY = pos.top + offset.y;
-	logger.info(`[${cfg.WIN_TITLE}] klik ${label} @ (${absX},${absY}) [offset ${offset.x},${offset.y}]`);
-	await bot.mouseMove(absX, absY, 0);
-	await bot.mouseClick('left');
-	return true;
-}
-
-/**
  * Capture screenshot via PowerShell + .NET System.Drawing.
  * Fallback kalau library AutoIt tidak expose _ScreenCapture_Capture.
  * Mengembalikan Buffer PNG, atau null kalau gagal.
  *
- * @param {string} [winTitle]  (saat ini belum dipakai — selalu full screen)
  * @returns {Promise<Buffer | null>}
  */
-async function captureViaPowerShell(winTitle) {
-	// Escape single-quote untuk PowerShell single-quoted string
-	const titleSafe = (winTitle || '').replace(/'/g, "''");
+async function captureViaPowerShell() {
 	const psScript = `
 $ErrorActionPreference = 'SilentlyContinue'
 Add-Type -AssemblyName System.Drawing
@@ -161,7 +139,6 @@ $g.Dispose()
 $bmp.Dispose()
 $ms.Dispose()
 `;
-	void titleSafe;
 	try {
 		const { stdout } = await exec('powershell.exe', ['-NoProfile', '-Command', psScript], {
 			windowsHide: true,
@@ -202,7 +179,7 @@ export async function captureErrorScreenshot(winTitle, target = 'unknown') {
 			const r = botAny._ScreenCapture_Capture(winTitle);
 			png = Buffer.isBuffer(r) ? r : r instanceof Promise ? Buffer.from(await r) : null;
 		} else {
-			png = await captureViaPowerShell(winTitle);
+			png = await captureViaPowerShell();
 		}
 	} catch (/** @type {unknown} */ e) {
 		logger.debug(`Capture screenshot gagal: ${formatError(e)}`);
@@ -234,6 +211,6 @@ export async function captureErrorScreenshot(winTitle, target = 'unknown') {
    PASSWORD?: string;
    MOVE_LEFT: number;
    MOVE_DOWN: number;
-   OFFSETS?: Record<string, { x: number, y: number } | undefined>;
- }} TargetConfig
+ }}
+ TargetConfig
  */

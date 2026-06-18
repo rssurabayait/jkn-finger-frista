@@ -2,45 +2,43 @@
 import bot from 'node-autoit-koffi';
 import { logger } from '../logger.js';
 import { BotError } from '../errors.js';
-import { delay, ensureWindow, forceClose, clickOffset } from './helpers.js';
+import { delay, ensureWindow, forceClose } from './helpers.js';
 
 /** @typedef {import('./helpers.js').TargetConfig} TargetConfig */
 
 const LOGIN_SETTLE_MS = 3000;
 const POST_LOGIN_DELAY_MS = 2000;
-const BETWEEN_FIELD_DELAY_MS = 300;
 
 /**
- * Login FRISTA — username + password + klik login.
- * Offset diambil dari cfg.OFFSETS (env).
+ * Isi kredensial via keyboard (Tab navigation, tanpa mouse).
+ * Flow: clear → username → Tab → clear → password → Tab → Space (login)
+ * @param {TargetConfig} cfg
+ */
+async function typeCredentials(cfg) {
+	if (!cfg.USERNAME || !cfg.PASSWORD) return;
+	await bot.send('^a{BACKSPACE}');
+	await bot.send(cfg.USERNAME);
+	await bot.send('{TAB}');
+	await bot.send('^a{BACKSPACE}');
+	await bot.send(cfg.PASSWORD);
+	await bot.send('{TAB}');
+	await bot.send(' ');
+	await delay(LOGIN_SETTLE_MS);
+}
+
+/**
+ * Login FRISTA — keyboard only.
  * @param {TargetConfig} cfg
  * @param {{ abort: boolean }} instance
  */
 async function loginFrista(cfg, instance) {
+	if (instance.abort) return;
 	if (!cfg.USERNAME || !cfg.PASSWORD) {
 		throw new BotError('FRISTA_USERNAME dan FRISTA_PASSWORD wajib diisi untuk login');
 	}
-	if (instance.abort) return;
 
-	const o = cfg.OFFSETS || {};
-	const title = cfg.WIN_TITLE;
-
-	// Username
-	await clickOffset(cfg, o.USERNAME_FIELD, 'USERNAME_FIELD');
-	await bot.send('^a{BACKSPACE}');
-	await bot.send(cfg.USERNAME);
-	await delay(BETWEEN_FIELD_DELAY_MS);
-
-	// Password
-	await clickOffset(cfg, o.PASSWORD_FIELD, 'PASSWORD_FIELD');
-	await bot.send('^a{BACKSPACE}');
-	await bot.send(cfg.PASSWORD);
-	await delay(BETWEEN_FIELD_DELAY_MS);
-
-	// Login button
-	await clickOffset(cfg, o.LOGIN_BUTTON, 'LOGIN_BUTTON');
-	logger.info(`[${title}] menunggu ${LOGIN_SETTLE_MS}ms untuk proses login...`);
-	await delay(LOGIN_SETTLE_MS);
+	await typeCredentials(cfg);
+	logger.info(`[${cfg.WIN_TITLE}] login executed`);
 }
 
 /**
@@ -61,6 +59,7 @@ export async function testLoad(cfg, instance) {
 
 /**
  * Scan: buka FRISTA, login (kalau belum), input card_number, trigger face recognition.
+ * Keyboard only — setelah login, Tab ke NIK → type → Tab → Space (foto).
  * @param {TargetConfig} cfg
  * @param {{ abort: boolean }} instance
  * @param {{ card_number?: string; exit?: boolean; wait?: number }} params
@@ -73,17 +72,13 @@ export async function scan(cfg, instance, params) {
 		await delay(POST_LOGIN_DELAY_MS);
 	}
 
-	const o = cfg.OFFSETS || {};
 	const title = cfg.WIN_TITLE;
 
 	if (params.card_number) {
-		await clickOffset(cfg, o.CARD_INPUT, 'CARD_INPUT');
 		await bot.send('^a{BACKSPACE}');
 		await bot.send(params.card_number);
-		await delay(BETWEEN_FIELD_DELAY_MS);
+		await delay(300);
 	}
-
-	await clickOffset(cfg, o.SCAN_BUTTON, 'SCAN_BUTTON');
 
 	if (params.exit) {
 		try {
@@ -97,7 +92,7 @@ export async function scan(cfg, instance, params) {
 }
 
 /**
- * Tutup paksa aplikasi FRISTA. Set abort flag agar loop/interrupt berjalan.
+ * Tutup paksa aplikasi FRISTA.
  * @param {TargetConfig} cfg
  * @param {{ abort: boolean }} instance
  */
@@ -108,14 +103,12 @@ export async function close(cfg, instance) {
 }
 
 /**
- * Bersihkan state input & toggle on-top. Untuk face-recognition app, ini no-op
- * karena tidak ada konsep window "hide" yang masuk akal. Override kalau perlu.
+ * No-op untuk FRISTA.
  * @param {TargetConfig} _cfg
  * @param {{ abort: boolean }} instance
  */
 export async function hide(_cfg, instance) {
 	if (instance.abort) return;
-	// no-op: FRISTA face-recognition app tidak butuh hide
 	void _cfg;
 	logger.info('frista hide (no-op)');
 }

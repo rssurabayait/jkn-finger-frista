@@ -100,6 +100,7 @@ Service menerima `POST` ke `/` dengan body `application/x-www-form-urlencoded` a
 | `test_load` | `fp` / `frista` | Buka aplikasi, login, lalu tutup (untuk verifikasi kredensial) |
 | `close` | `fp` / `frista` | Tutup paksa window aplikasi |
 | `hide` | `fp` / `frista` | Bersihkan state & toggle window on-top |
+| `calibrate` | `frista` | Calibration mode — bantu tentukan koordinat klik FRISTA |
 
 ### Contoh: Trigger scan dari web APM (JavaScript)
 
@@ -174,6 +175,11 @@ curl -X POST http://127.0.0.1:3684/ \
 curl -X POST http://127.0.0.1:3684/ \
   -H "Content-Type: application/json" \
   -d '{"action":"close","target":"fp"}'
+
+# Calibration mode FRISTA (interaktif — ikuti instruksi di log/terminal)
+curl -X POST http://127.0.0.1:3684/ \
+  -H "Content-Type: application/json" \
+  -d '{"action":"calibrate","target":"frista"}'
 ```
 
 ## Multi-target & Concurrency
@@ -187,7 +193,42 @@ Setiap `target` (`fp`, `frista`) memiliki instance bot sendiri dengan `abort` fl
 
 Bot FRISTA perlu koordinat klik untuk: field username, field password, tombol login, input NIK/No Kartu, dan tombol trigger face recognition. Koordinat disimpan di `.env` (bukan hardcode) supaya teknisi RS bisa tweak tanpa edit kode.
 
-### Tools
+### Cara 1: Calibration Mode (Recommended)
+
+Gunakan action `calibrate` untuk menentukan koordinat secara interaktif:
+
+```bash
+curl -X POST http://127.0.0.1:3684/ \
+  -H "Content-Type: application/json" \
+  -d '{"action":"calibrate","target":"frista"}'
+```
+
+**Cara kerja:**
+1. Bot membuka FRISTA (kalau belum)
+2. Untuk setiap field, bot minta user gerakkan mouse ke posisi field
+3. User berhenti diam ~1 detik
+4. Bot otomatis merekam posisi dan menghitung offset
+5. Setelah selesai, bot return semua koordinat + menampilkan di log
+
+**Response:**
+```json
+{
+  "message": "OK",
+  "offsets": {
+    "USERNAME_FIELD": { "x": 120, "y": 200 },
+    "PASSWORD_FIELD": { "x": 120, "y": 250 },
+    "LOGIN_BUTTON": { "x": 180, "y": 310 },
+    "CARD_INPUT": { "x": 150, "y": 400 },
+    "SCAN_BUTTON": { "x": 200, "y": 500 }
+  }
+}
+```
+
+**Langkah selanjutnya:**
+1. Copy nilai dari response/log ke file `.env`
+2. Jalankan `test_load` untuk verifikasi: `curl -X POST http://127.0.0.1:3684/ -H "Content-Type: application/json" -d '{"action":"test_load","target":"frista"}'`
+
+### Cara 2: AutoIt Window Info Tool (Manual)
 
 1. **Download & install** [AutoIt full installer](https://www.autoitscript.com/site/autoit/downloads/) (~30MB). Pilih "Full Installation" supaya dapat `Au3Info.exe`.
 2. **Jalankan** `C:\Program Files (x86)\AutoIt3\Au3Info.exe`
