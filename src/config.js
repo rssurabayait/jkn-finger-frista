@@ -22,11 +22,23 @@ const targetSchema = z
 	})
 	.passthrough();
 
+const bool = (def) =>
+	z.preprocess(
+		(v) => (v === undefined || v === null || v === '' ? String(def) : String(v).toLowerCase()),
+		z
+			.union([z.literal('true'), z.literal('false'), z.literal('1'), z.literal('0')])
+			.transform((v) => v === 'true' || v === '1')
+	);
+
 const envSchema = z
 	.object({
 		SERVER_PORT: num(3684),
 		LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
 		SIMRS_WIN_TITLE: z.string().optional(),
+		MACHINE_NAME: z.string().min(1, { message: 'MACHINE_NAME tidak boleh kosong' }).default('APM-UNKNOWN'),
+		TELEGRAM_ENABLED: bool(false),
+		TELEGRAM_BOT_TOKEN: z.string().optional(),
+		TELEGRAM_CHAT_ID: z.string().optional(),
 		targets: z.object({
 			fp: targetSchema,
 			frista: targetSchema
@@ -39,6 +51,10 @@ function loadFromEnv() {
 		SERVER_PORT: process.env.SERVER_PORT,
 		LOG_LEVEL: process.env.LOG_LEVEL,
 		SIMRS_WIN_TITLE: process.env.SIMRS_WIN_TITLE,
+		MACHINE_NAME: process.env.MACHINE_NAME,
+		TELEGRAM_ENABLED: process.env.TELEGRAM_ENABLED,
+		TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+		TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
 		targets: {
 			fp: {
 				WIN_TITLE: process.env.FP_WIN_TITLE,

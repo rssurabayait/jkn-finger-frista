@@ -11,9 +11,15 @@ importers:
       node-autoit-koffi:
         specifier: ^1.0.5
         version: 1.0.5
+      node-telegram-bot-api:
+        specifier: ^1.1.0
+        version: 1.1.0
       winston:
         specifier: ^3.17.0
         version: 3.19.0
+      winston-transport:
+        specifier: ^4.9.0
+        version: 4.9.0
       zod:
         specifier: ^3.23.8
         version: 3.25.76
@@ -385,6 +391,10 @@ packages:
   node-gyp-build@4.8.1:
     resolution: {integrity: sha512-OSs33Z9yWr148JZcbZd5WiAXhh/n9z8TxQcdMhIOlpN9AhWpLfvVFO73+m77bBABQMaY9XSvIa+qk0jlI7Gcaw==}
     hasBin: true
+
+  node-telegram-bot-api@1.1.0:
+    resolution: {integrity: sha512-kNBTBlYVP+OaBb8ffn3zsIC4CTJqpnRniNS9VQRURQrBwYSJE1Ip7yHM/JKw36qUcQtu0bxbXAs2yMNk8HXpdA==}
+    engines: {node: '>=18'}
 
   one-time@1.0.0:
     resolution: {integrity: sha512-5DXOiRKwuSEcQ/l0kGCF6Q3jcADFv5tSmRaJck/OqkVFcOzutB134KRSfF0xDrL39MNnqxbHBbUUcjZIhTgb2g==}
@@ -869,6 +879,8 @@ snapshots:
       - supports-color
 
   node-gyp-build@4.8.1: {}
+
+  node-telegram-bot-api@1.1.0: {}
 
   one-time@1.0.0:
     dependencies:

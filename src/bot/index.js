@@ -54,13 +54,17 @@ export async function handle(params) {
 	}
 
 	const instance = getInstance(target);
-	logger.info(`dispatch: target=${target} action=${action}`);
+	const startTime = Date.now();
+	logger.info(`dispatch: target=${target} action=${action} starting`);
 
 	try {
 		// Cast params ke any: schema sudah validasi di server.js, di sini kita trust.
 		// Per-target handler bisa strict sesuai kebutuhannya masing-masing.
-		return await fn(targetCfg, instance, /** @type {any} */ (params));
+		const result = await fn(targetCfg, instance, /** @type {any} */ (params));
+		logger.info(`dispatch: target=${target} action=${action} selesai (${Date.now() - startTime}ms)`);
+		return result;
 	} catch (/** @type {unknown} */ e) {
+		const duration = Date.now() - startTime;
 		// Best-effort: capture screenshot kalau ini BotError dan targetCfg punya WIN_TITLE
 		if (e instanceof BotError && targetCfg.WIN_TITLE) {
 			try {
@@ -69,6 +73,7 @@ export async function handle(params) {
 				logger.warn(`captureErrorScreenshot gagal: ${formatError(capErr)}`);
 			}
 		}
+		logger.error(`dispatch: target=${target} action=${action} GAGAL setelah ${duration}ms: ${e instanceof Error ? e.message : String(e)}`);
 		throw e;
 	}
 }

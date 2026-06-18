@@ -21,6 +21,8 @@ Layanan HTTP lokal (Windows) yang mengendalikan **Aplikasi Sidik Jari BPJS** dan
 - Auto-restart jika crash
 - Validasi konfigurasi saat startup (fail-fast)
 - Logging terstruktur (winston) ke console + file rotation
+- **Telegram notifikasi** — error log otomatis kirim ke Telegram, dengan bot commands `/on`, `/off`, `/status`, `/logs`
+- **Multi-machine monitoring** — beberapa APM kirim log ke 1 chat, dibedakan `MACHINE_NAME`
 
 ## Instalasi
 

@@ -21,6 +21,7 @@ export async function testLoad(cfg, instance) {
 	if (!cfg.USERNAME || !cfg.PASSWORD) {
 		throw new BotError('FP_USERNAME dan FP_PASSWORD wajib diisi di .env untuk action=test_load');
 	}
+	logger.info('[fp] testLoad starting');
 	const already = await ensureWindow(cfg);
 	if (!already) {
 		await typeCredentials(cfg);
@@ -29,7 +30,7 @@ export async function testLoad(cfg, instance) {
 	await bot.winMove(cfg.WIN_TITLE, '', -550, 200);
 	await delay(WINDOW_REPOSITION_MS);
 	await forceClose(cfg);
-	logger.info('test_load selesai');
+	logger.info('[fp] testLoad selesai');
 }
 
 /**
@@ -46,6 +47,7 @@ export async function scan(cfg, instance, params) {
 	if (!cfg.USERNAME || !cfg.PASSWORD) {
 		throw new BotError('FP_USERNAME dan FP_PASSWORD wajib diisi di .env untuk action=scan');
 	}
+	logger.info(`[fp] scan starting: card_number=${params.card_number} exit=${params.exit ?? false}`);
 
 	const { move_left: left, move_down: top } = { move_left: cfg.MOVE_LEFT, move_down: cfg.MOVE_DOWN };
 
@@ -54,8 +56,8 @@ export async function scan(cfg, instance, params) {
 	if (simrs) {
 		try {
 			await bot.winSetOnTop(simrs, '', 1);
-		} catch {
-			// ignore — window might not exist
+		} catch (/** @type {unknown} */ e) {
+			logger.debug(`winSetOnTop(SIMRS, on) gagal: ${e instanceof Error ? e.message : String(e)}`);
 		}
 	}
 
@@ -67,8 +69,8 @@ export async function scan(cfg, instance, params) {
 	if (simrs) {
 		try {
 			await bot.winSetOnTop(simrs, '', 0);
-		} catch {
-			// ignore
+		} catch (/** @type {unknown} */ e) {
+			logger.debug(`winSetOnTop(SIMRS, off) gagal: ${e instanceof Error ? e.message : String(e)}`);
 		}
 	}
 
@@ -103,7 +105,7 @@ export async function scan(cfg, instance, params) {
 
 	// Untuk saat ini scan selesai setelah input card_number.
 	// Penambahan loop klik (mouse) dilakukan di fp.js versi future.
-	logger.info(`scan selesai untuk card_number=${params.card_number}`);
+	logger.info(`[fp] scan selesai: card_number=${params.card_number}`);
 }
 
 /**
@@ -112,10 +114,11 @@ export async function scan(cfg, instance, params) {
  * @param {{ abort: boolean }} instance
  */
 export async function close(cfg, instance) {
+	logger.info('[fp] close starting');
 	instance.abort = true;
 	await bot.winActivate(cfg.WIN_TITLE);
 	await forceClose(cfg);
-	logger.info('close selesai');
+	logger.info('[fp] close selesai');
 }
 
 /**
@@ -125,6 +128,7 @@ export async function close(cfg, instance) {
  */
 export async function hide(cfg, instance) {
 	if (instance.abort) return;
+	logger.info('[fp] hide starting');
 	await bot.send('^a{BACKSPACE}');
 	const simrs = config.SIMRS_WIN_TITLE;
 	if (simrs) {
@@ -135,7 +139,7 @@ export async function hide(cfg, instance) {
 	} else {
 		await bot.winSetOnTop(cfg.WIN_TITLE, '', 0);
 	}
-	logger.info('hide selesai');
+	logger.info('[fp] hide selesai');
 }
 
 /** @param {TargetConfig} cfg */

@@ -8,6 +8,7 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 import { AppError, ValidationError } from './errors.js';
 import { handle } from './bot/index.js';
+import { telegram } from './telegram.js';
 
 const HOST = '127.0.0.1';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -74,7 +75,21 @@ function json(res, status, data) {
 	res.end(body);
 }
 
+/**
+ * Sanitasi params untuk logging: hapus field sensitif (password).
+ * @param {Record<string, any>} [params]
+ */
+function sanitizeForLog(params) {
+	if (!params) return {};
+	const { password, ...rest } = params;
+	if (password !== undefined) rest.password = '***';
+	return rest;
+}
+
 const server = createServer(async (req, res) => {
+	const startTime = Date.now();
+	const url = new URL(req.url || '/', `http://${HOST}`);
+
 	// CORS
 	res.setHeader('Access-Control-Allow-Origin', '*');
 	res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -85,24 +100,31 @@ const server = createServer(async (req, res) => {
 		return res.end();
 	}
 
-	try {
-		const url = new URL(req.url || '/', `http://${HOST}`);
+	// Log request masuk
+	logger.info(`→ ${req.method} ${url.pathname}`);
 
+	try {
 		if (req.method === 'GET' && url.pathname === '/') {
-			return json(res, 200, {
+			const responseData = {
 				name: 'apm-jkn-bot',
 				version: pkg.version,
 				message: 'Layanan APM JKN siap. Kirim POST untuk trigger aksi.',
 				targets: ['fp', 'frista'],
 				actions: ['scan', 'test_load', 'close', 'hide']
-			});
+			};
+			json(res, 200, responseData);
+			logger.info(`← GET / 200 (${Date.now() - startTime}ms)`);
+			return;
 		}
 
 		if (req.method === 'POST' && url.pathname === '/') {
 			const body = await readBody(req);
 			const params = requestSchema.parse(body);
+			logger.debug(`POST / body=${JSON.stringify(sanitizeForLog(params))}`);
 			await handle(params);
-			return json(res, 201, { message: 'OK' });
+			json(res, 201, { message: 'OK' });
+			logger.info(`← POST / 201 target=${params.target} action=${params.action} (${Date.now() - startTime}ms)`);
+			return;
 		}
 
 		throw new AppError(`Not found: ${req.method} ${url.pathname}`, { status: 404, code: 'NOT_FOUND' });
@@ -111,7 +133,9 @@ const server = createServer(async (req, res) => {
 		const err = e instanceof AppError ? e : new AppError(causeMessage, { cause: e });
 		const detail = err.cause instanceof z.ZodError ? err.cause.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') : undefined;
 		logger.error(`[${err.code}] ${err.message}${detail ? ` (${detail})` : ''}`);
-		return json(res, err.status, { message: err.message, code: err.code, ...(detail ? { detail } : {}) });
+		json(res, err.status, { message: err.message, code: err.code, ...(detail ? { detail } : {}) });
+		const lvl = err.status >= 500 ? 'error' : 'warn';
+		logger[lvl](`← ${req.method} ${url.pathname} ${err.status} (${Date.now() - startTime}ms)`);
 	}
 });
 
@@ -121,6 +145,7 @@ server.on('error', (err) => {
 
 server.listen(config.SERVER_PORT, HOST, () => {
 	logger.info(`Server running at http://${HOST}:${config.SERVER_PORT}`);
+	telegram.sendStartup().catch(() => {});
 });
 
 // Tangani exception tak tertangkap agar tidak silent-crash
@@ -132,3 +157,13 @@ process.on('unhandledRejection', (/** @type {unknown} */ err) => {
 	const message = err instanceof Error ? err.message : String(err);
 	logger.error(`unhandledRejection: ${message}`);
 });
+
+process.on('SIGINT', () => {
+	telegram.sendShutdown().finally(() => process.exit(0));
+});
+process.on('SIGTERM', () => {
+	telegram.sendShutdown().finally(() => process.exit(0));
+});
+
+// Inisialisasi Telegram bot (setelah logger siap)
+telegram.init();

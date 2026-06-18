@@ -105,6 +105,28 @@ if (-not (Test-Path -Path .env)) {
 	}
 }
 
+# Tanya konfigurasi Telegram ke user (optional, skip = nonaktif)
+Write-Host ""
+Write-Host "===== Konfigurasi Telegram (optional) =====" -ForegroundColor Cyan
+$tgChoice = Read-Host "Aktifkan notifikasi error ke Telegram? (y/N)"
+if ($tgChoice -eq 'y' -or $tgChoice -eq 'Y') {
+	$tgToken = Read-Host "TELEGRAM_BOT_TOKEN (dari @BotFather)"
+	$tgChat = Read-Host "TELEGRAM_CHAT_ID (user ID atau group ID, mulai dengan -100 untuk group)"
+	$tgName = Read-Host "MACHINE_NAME (nama unik mesin ini, contoh: APM-LOKET-01)"
+
+	# Replace/add baris di .env
+	$envFile = Get-Content .env
+	$envFile = $envFile | Where-Object { $_ -notmatch '^TELEGRAM_' -and $_ -notmatch '^MACHINE_NAME=' }
+	$envFile += "MACHINE_NAME=$tgName"
+	$envFile += "TELEGRAM_ENABLED=true"
+	$envFile += "TELEGRAM_BOT_TOKEN=$tgToken"
+	$envFile += "TELEGRAM_CHAT_ID=$tgChat"
+	$envFile | Set-Content .env
+	Write-Host "Telegram diaktifkan untuk [$tgName]" -ForegroundColor Green
+} else {
+	Write-Host "Telegram dilewati (tidak diaktifkan)" -ForegroundColor Yellow
+}
+
 # Run pm2 command (entry: src/server.js)
 $pm2Entry = ".\src\server.js"
 pm2 start $pm2Entry --name apm-jkn-bot --node-args="--env-file=.env"

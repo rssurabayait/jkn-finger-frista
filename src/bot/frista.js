@@ -49,13 +49,14 @@ async function loginFrista(cfg, instance) {
  */
 export async function testLoad(cfg, instance) {
 	if (instance.abort) return;
+	logger.info('[frista] testLoad starting');
 	const already = await ensureWindow(cfg);
 	if (!already) {
 		await loginFrista(cfg, instance);
 		await delay(POST_LOGIN_DELAY_MS);
 	}
 	await forceClose(cfg);
-	logger.info('frista testLoad selesai');
+	logger.info('[frista] testLoad selesai');
 }
 
 /**
@@ -67,6 +68,7 @@ export async function testLoad(cfg, instance) {
  */
 export async function scan(cfg, instance, params) {
 	if (instance.abort) return;
+	logger.info(`[frista] scan starting: card_number=${params.card_number ?? '-'} exit=${params.exit ?? false}`);
 	const already = await ensureWindow(cfg);
 	if (!already) {
 		await loginFrista(cfg, instance);
@@ -85,11 +87,11 @@ export async function scan(cfg, instance, params) {
 		try {
 			logger.info(`[${title}] menunggu window close otomatis...`);
 			await bot.winWaitClose(title);
-		} catch {
-			logger.warn(`[${title}] winWaitClose timeout — window mungkin tidak auto-close`);
+		} catch (/** @type {unknown} */ e) {
+			logger.warn(`[${title}] winWaitClose timeout — window mungkin tidak auto-close (${e instanceof Error ? e.message : String(e)})`);
 		}
 	}
-	logger.info(`frista scan selesai${params.card_number ? ` (card=${params.card_number})` : ''}`);
+	logger.info(`[frista] scan selesai${params.card_number ? `: card=${params.card_number}` : ''}`);
 }
 
 /**
@@ -98,9 +100,10 @@ export async function scan(cfg, instance, params) {
  * @param {{ abort: boolean }} instance
  */
 export async function close(cfg, instance) {
+	logger.info('[frista] close starting');
 	instance.abort = true;
 	await forceClose(cfg);
-	logger.info('frista close selesai');
+	logger.info('[frista] close selesai');
 }
 
 /**
@@ -110,6 +113,7 @@ export async function close(cfg, instance) {
  */
 export async function hide(cfg, instance) {
 	if (instance.abort) return;
+	logger.info('[frista] hide starting');
 	await bot.send('^a{BACKSPACE}');
 	const simrs = config.SIMRS_WIN_TITLE;
 	if (simrs) {
@@ -118,17 +122,17 @@ export async function hide(cfg, instance) {
 			await bot.winSetOnTop(simrs, '', 1);
 			await bot.winSetOnTop(cfg.WIN_TITLE, '', 0);
 			await bot.winSetOnTop(simrs, '', 0);
-		} catch {
-			// ignore
+		} catch (/** @type {unknown} */ e) {
+			logger.debug(`winSetOnTop (dengan SIMRS) gagal: ${e instanceof Error ? e.message : String(e)}`);
 		}
 	} else {
 		try {
 			await bot.winSetOnTop(cfg.WIN_TITLE, '', 0);
-		} catch {
-			// ignore
+		} catch (/** @type {unknown} */ e) {
+			logger.debug(`winSetOnTop (tanpa SIMRS) gagal: ${e instanceof Error ? e.message : String(e)}`);
 		}
 	}
-	logger.info('frista hide selesai');
+	logger.info('[frista] hide selesai');
 }
 
 export const frista = { testLoad, scan, close, hide };
