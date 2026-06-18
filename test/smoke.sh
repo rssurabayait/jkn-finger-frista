@@ -42,10 +42,10 @@ run_test "default FP test_load" 201 -X POST "${BASE}/" \
 # Catatan: test di environment non-Windows akan gagal di node-autoit-koffi.
 # Test ini di sini hanya memastikan server merespons dengan request yang valid.
 
-# 2. target=frista — stub (gagal terarah dengan 500)
-run_test "FRISTA stub" 500 -X POST "${BASE}/" \
+# 2. target=frista — test_load (keyboard-only, no calibration)
+run_test "FRISTA test_load" 201 -X POST "${BASE}/" \
 	-H "Content-Type: application/x-www-form-urlencoded" \
-	-d "action=scan&target=frista"
+	-d "action=test_load&target=frista"
 
 # 3. invalid target
 run_test "invalid target" 400 -X POST "${BASE}/" \

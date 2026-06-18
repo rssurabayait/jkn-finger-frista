@@ -1,64 +1,84 @@
 # APM JKN Bot
 
-Layanan HTTP lokal (Windows) yang mengendalikan **Aplikasi Sidik Jari BPJS** dan **Aplikasi FRISTA** dari browser APM/SIMRS. Service ini berjalan di background pada workstation Anjungan Pendaftaran Mandiri (APM) dan merespons request `POST` dari halaman web APM untuk membuka aplikasi sidik jari / FRISTA, login otomatis, lalu menutup window setelah proses selesai.
+Layanan HTTP lokal (Windows) yang mengendalikan **Aplikasi Sidik Jari BPJS** dan **Aplikasi FRISTA** dari browser APM/SIMRS. Service berjalan di background pada workstation Anjungan Pendaftaran Mandiri (APM) dan merespons request `POST` dari halaman web APM untuk membuka aplikasi, login otomatis, input data, lalu menutup window.
 
 ```
-┌─────────────┐    fetch()    ┌──────────────────┐    AutoIt     ┌────────────────────┐
+┌─────────────┐    fetch()    ┌──────────────────┐    keyboard    ┌────────────────────┐
 │  Web APM /  │ ────────────▶ │  apm-jkn-bot     │ ────────────▶ │ Aplikasi Sidik     │
-│  SIMRS      │   POST /      │  (Node.js HTTP)  │   keyboard/   │ Jari / FRISTA      │
-│  (browser)  │ ◀──────────── │  port 3684       │   mouse      │ (Windows)          │
+│  SIMRS      │   POST /      │  (Node.js HTTP)  │   send()     │ Jari / FRISTA      │
+│  (browser)  │ ◀──────────── │  port 3684       │              │ (Windows)          │
 └─────────────┘    JSON       └──────────────────┘              └────────────────────┘
 ```
 
-> **Catatan keamanan**: Service di-bind ke `127.0.0.1` saja, tidak terekspos ke jaringan. Jangan ubah ke `0.0.0.0` kecuali Anda paham implikasinya.
+> **Catatan keamanan**: Service di-bind ke `127.0.0.1` saja, tidak terekspos ke jaringan.
 
 ## Fitur
 
-- Mengendalikan Aplikasi Sidik Jari BPJS Kesehatan (`After.exe`) via `node-autoit-koffi`
-- Mendukung multi-target: `fp` (default) dan `frista` (stub, belum diimplementasi)
-- Multi-instance per target — FP dan FRISTA bisa berjalan paralel
+- **FP (Aplikasi Sidik Jari BPJS)** — login via keyboard (Tab+Enter), input nomor kartu
+- **FRISTA (Face Recognition BPJS)** — login via keyboard (Tab+Space), input NIK
+- Multi-target — FP dan FRISTA bisa berjalan paralel
+- Auto-start on boot via PM2 + Windows Startup
+- Auto-restart jika crash
 - Validasi konfigurasi saat startup (fail-fast)
-- Validasi request body pakai zod
 - Logging terstruktur (winston) ke console + file rotation
-- Smoke test berbasis curl
 
 ## Instalasi
 
 ### Prasyarat
 
 - Windows 10/11
-- Node.js >= 20 (otomatis di-install oleh `install.ps1`)
 - Aplikasi Sidik Jari BPJS dan/atau FRISTA sudah ter-install
 
-### Langkah
+### Langkah Instalasi
 
-1. **Extract** project ini ke sebuah folder (mis. `C:\apm-jkn\`)
+1. **Copy project** ke folder tujuan (mis. `C:\apm-jkn\`)
+
 2. **Buat `.env`** dari template:
    ```powershell
    Copy-Item .env.example .env
    ```
-3. **Edit `.env`** — sesuaikan path installer, kredensial, dan window title sesuai instalasi lokal Anda.
+
+3. **Edit `.env`** — sesuaikan:
+   - Path executable aplikasi (`FP_INS_PATH`, `FRISTA_INT_PATH`)
+   - Username & password (`FP_USERNAME`, `FP_PASSWORD`, `FRISTA_USERNAME`, `FRISTA_PASSWORD`)
+   - Window title jika berbeda (`FP_WIN_TITLE`, `FRISTA_WIN_TITLE`)
+
 4. **Jalankan installer** sebagai Administrator:
-   - Klik kanan `install.ps1` → **Run with PowerShell**
-   - Jika muncul prompt Execution Policy, ketik `A` (Yes to All)
-5. Setelah selesai, service berjalan via **PM2** dengan nama proses `apm-jkn-bot`, listen di `http://127.0.0.1:3684`.
+   ```powershell
+   # Klik kanan install.ps1 → Run with PowerShell
+   # Atau:
+   Set-ExecutionPolicy Bypass -Scope Process -Force
+   .\install.ps1
+   ```
 
-> `install.ps1` mengaktifkan **pnpm** via **corepack** (built-in Node.js), sehingga tidak perlu install pnpm terpisah.
+5. **Selesai!** Service otomatis berjalan via PM2.
 
-### Verifikasi service berjalan
+### Apa yang dilakukan `install.ps1`?
+
+| Step | Keterangan |
+|---|---|
+| Install Node.js | Download & install Node.js 20 LTS (kalau belum ada) |
+| Aktifkan pnpm | Via corepack (built-in Node.js) |
+| Install dependencies | `pnpm install --prod` |
+| Install PM2 | `npm install pm2 -g` |
+| Start service | `pm2 start src/server.js --name apm-jkn-bot` |
+| Save process list | `pm2 save --force` |
+| Setup auto-start | Copy `pm2-startup.bat` ke folder Startup Windows |
+
+### Verifikasi
 
 ```powershell
+# Cek status PM2
 pm2 status
+
+# Cek health endpoint
+Invoke-RestMethod -Uri http://127.0.0.1:3684/
+
+# Lihat log realtime
 pm2 logs apm-jkn-bot
 ```
 
-Atau cek endpoint health:
-
-```powershell
-curl http://127.0.0.1:3684/
-```
-
-Response:
+Response health check:
 ```json
 {
   "name": "apm-jkn-bot",
@@ -69,200 +89,189 @@ Response:
 }
 ```
 
-## Konfigurasi
+## Auto-Start on Boot
 
-Semua konfigurasi ada di file `.env`. Template lengkap di `.env.example`.
+Service otomatis jalan saat PC/APM dinyalakan:
+
+1. PM2 menyimpan process list ke `~/.pm2/dump.pm2` saat `pm2 save`
+2. File `pm2-startup.bat` di folder **Startup** Windows menjalankan `pm2 resurrect` saat boot
+3. Semua service yang sebelumnya running akan otomatis start ulang
+
+```powershell
+# Simpan ulang process list (setelah ada perubahan)
+pm2 save
+
+# Cek apakah startup sudah terkonfigurasi
+Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\pm2-startup.bat"
+```
+
+### Manajemen Service
+
+```powershell
+pm2 status                    # Lihat status semua process
+pm2 logs apm-jkn-bot          # Log realtime
+pm2 restart apm-jkn-bot       # Restart service
+pm2 stop apm-jkn-bot          # Stop service
+pm2 delete apm-jkn-bot        # Hapus dari PM2
+pm2 save                      # Simpan process list (WAJIB setelah perubahan)
+```
+
+## Konfigurasi (`.env`)
 
 | Variabel | Default | Keterangan |
 |---|---|---|
 | `SERVER_PORT` | `3684` | Port HTTP server |
 | `LOG_LEVEL` | `info` | Level log: `error`, `warn`, `info`, `debug` |
-| `SIMRS_WIN_TITLE` | (kosong) | Judul window SIMRS di Chrome, untuk toggle on-top. Kosongkan jika tidak perlu |
-| `FP_WIN_TITLE` | `Aplikasi Registrasi Sidik Jari` | Judul window Aplikasi Sidik Jari |
-| `FP_INS_PATH` | `C:\...\After.exe` | Path lengkap installer/executable |
-| `FP_USERNAME` | (wajib) | Username login Aplikasi Sidik Jari |
+| `SIMRS_WIN_TITLE` | (kosong) | Judul window SIMRS Chrome, untuk toggle on-top |
+| **FP (Sidik Jari)** | | |
+| `FP_WIN_TITLE` | `Aplikasi Registrasi Sidik Jari` | Judul window |
+| `FP_INS_PATH` | | Path lengkap `After.exe` |
+| `FP_USERNAME` | (wajib) | Username login |
 | `FP_PASSWORD` | (wajib) | Password login |
-| `FP_MOVE_LEFT` | `680` | Offset window ke kiri (px) |
-| `FP_MOVE_DOWN` | `600` | Offset window ke bawah (px) |
-| `FRISTA_*` | (lihat `.env.example`) | Sama seperti di atas, untuk target FRISTA |
+| `FP_MOVE_LEFT` | `680` | Posisi window X (px) |
+| `FP_MOVE_DOWN` | `600` | Posisi window Y (px) |
+| **FRISTA** | | |
+| `FRISTA_WIN_TITLE` | `Aplikasi FRISTA` | Judul window |
+| `FRISTA_INT_PATH` | | Path lengkap `frista.exe` |
+| `FRISTA_USERNAME` | (wajib) | Username login |
+| `FRISTA_PASSWORD` | (wajib) | Password login |
+| `FRISTA_MOVE_LEFT` | `680` | Posisi window X (px) |
+| `FRISTA_MOVE_DOWN` | `600` | Posisi window Y (px) |
 
-> **Path Windows dengan spasi** (mis. `Program Files (x86)`) perlu di-quote pakai single-quote di `.env`. Contoh: `FP_INS_PATH='C:\Program Files (x86)\...\After.exe'`
+> **Path dengan spasi** harus di-quote pakai single-quote: `FP_INS_PATH='C:\Program Files (x86)\...\After.exe'`
 
-## Penggunaan
+### Konfigurasi FRISTA (`config.conf`)
 
-Service menerima `POST` ke `/` dengan body `application/x-www-form-urlencoded` atau `application/json`.
+File `config.conf` berisi konfigurasi khusus FRISTA:
 
-### Aksi yang tersedia
+```ini
+[Config]
+camera_id = 0
+api = https://frista.bpjs-kesehatan.go.id/frista-api
+```
+
+| Field | Keterangan |
+|---|---|
+| `camera_id` | ID kamera yang dipakai untuk face recognition (default: `0`) |
+| `api` | Endpoint API FRISTA BPJS Kesehatan |
+
+## API Reference
+
+Service menerima `POST` ke `/` dengan body `application/json`.
+
+### Actions
 
 | `action` | `target` | Keterangan |
 |---|---|---|
-| `scan` | `fp` / `frista` | Buka aplikasi, login (kalau perlu), input `card_number` |
-| `test_load` | `fp` / `frista` | Buka aplikasi, login, lalu tutup (untuk verifikasi kredensial) |
-| `close` | `fp` / `frista` | Tutup paksa window aplikasi |
-| `hide` | `fp` / `frista` | Bersihkan state & toggle window on-top |
-| `calibrate` | `frista` | Calibration mode — bantu tentukan koordinat klik FRISTA |
+| `scan` | `fp` / `frista` | Buka app → login → input card_number |
+| `test_load` | `fp` / `frista` | Buka app → login → tutup (verifikasi kredensial) |
+| `close` | `fp` / `frista` | Tutup paksa window |
+| `hide` | `fp` / `frista` | Bersihkan state & toggle on-top |
 
-### Contoh: Trigger scan dari web APM (JavaScript)
+### Parameters
 
-**Target: Aplikasi Sidik Jari BPJS** (default)
-```js
-async function openFingerprint() {
-  const response = await fetch('http://127.0.0.1:3684/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'scan',
-      target: 'fp',           // opsional, default 'fp'
-      card_number: '0001234567890',
-      exit: true,             // tunggu window close (opsional, default false)
-      wait: 5000              // ms, jeda setelah login (opsional, default 5000)
-    })
-  });
+| Parameter | Type | Keterangan |
+|---|---|---|
+| `action` | string | **Wajib.** `scan`, `test_load`, `close`, `hide` |
+| `target` | string | `fp` (default) atau `frista` |
+| `card_number` | string | Nomor kartu BPJS/NIK (untuk `scan`) |
+| `exit` | boolean | `true` = tunggu window close (opsional) |
+| `wait` | number | Jeda setelah login dalam ms (opsional, default 5000) |
 
-  if (response.ok) {
-    // Sukses setelah window sidik jari tertutup
-  } else {
-    const err = await response.json();
-    alert(err.message);
-  }
-}
-```
+### Contoh Penggunaan
 
-**Target: FRISTA** (saat ini stub)
-```js
-async function openFrista() {
-  const response = await fetch('http://127.0.0.1:3684/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'scan',
-      target: 'frista'
-    })
-  });
-  // ...
-}
-```
-
-### Contoh dengan form-urlencoded (backward-compatible)
+#### JavaScript (fetch)
 
 ```js
-body: new URLSearchParams({
-  action: 'scan',
-  target: 'fp',
-  card_number: '0001234567890',
-  exit: 'true',
-  wait: '5000'
-})
+// Scan sidik jari
+const res = await fetch('http://127.0.0.1:3684/', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'scan',
+    target: 'fp',
+    card_number: '0001234567890',
+    exit: true,
+    wait: 5000
+  })
+});
+
+// Scan FRISTA
+const res = await fetch('http://127.0.0.1:3684/', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'scan',
+    target: 'frista',
+    card_number: '0001234567890'
+  })
+});
 ```
 
-### Contoh dengan curl (untuk testing)
+#### PowerShell
+
+```powershell
+# Health check
+Invoke-RestMethod -Uri http://127.0.0.1:3684/
+
+# Test load FRISTA
+$body = '{"action":"test_load","target":"frista"}'
+Invoke-RestMethod -Uri http://127.0.0.1:3684/ -Method POST -ContentType "application/json" -Body $body
+
+# Scan FRISTA dengan nomor kartu
+$body = '{"action":"scan","target":"frista","card_number":"0001234567890"}'
+Invoke-RestMethod -Uri http://127.0.0.1:3684/ -Method POST -ContentType "application/json" -Body $body
+
+# Tutup aplikasi
+$body = '{"action":"close","target":"frista"}'
+Invoke-RestMethod -Uri http://127.0.0.1:3684/ -Method POST -ContentType "application/json" -Body $body
+```
+
+#### curl
 
 ```bash
 # Health check
 curl http://127.0.0.1:3684/
 
-# Test load (verifikasi kredensial)
+# Test load
 curl -X POST http://127.0.0.1:3684/ \
   -H "Content-Type: application/json" \
   -d '{"action":"test_load","target":"fp"}'
 
-# Scan BPJS
+# Scan
 curl -X POST http://127.0.0.1:3684/ \
   -H "Content-Type: application/json" \
-  -d '{"action":"scan","target":"fp","card_number":"0001234567890","exit":true,"wait":5000}'
-
-# Tutup aplikasi
-curl -X POST http://127.0.0.1:3684/ \
-  -H "Content-Type: application/json" \
-  -d '{"action":"close","target":"fp"}'
-
-# Calibration mode FRISTA (interaktif — ikuti instruksi di log/terminal)
-curl -X POST http://127.0.0.1:3684/ \
-  -H "Content-Type: application/json" \
-  -d '{"action":"calibrate","target":"frista"}'
+  -d '{"action":"scan","target":"fp","card_number":"0001234567890"}'
 ```
+
+## Cara Kerja
+
+### FP (Aplikasi Sidik Jari BPJS)
+
+Keyboard-only approach — tidak perlu mouse, tidak perlu calibration:
+
+```
+Buka app → type username → Tab → type password → Enter (login)
+→ type nomor kartu → (proses sidik jari otomatis)
+```
+
+### FRISTA (Face Recognition BPJS)
+
+Keyboard-only approach — tidak perlu mouse, tidak perlu calibration:
+
+```
+Buka app → type username → Tab → type password → Tab → Space (login)
+→ type NIK → user klik "Ambil Foto" manual
+```
+
+> **Catatan:** FRISTA memerlukan klik manual untuk tombol "Ambil Foto" karena tidak bisa diakses via Tab.
 
 ## Multi-target & Concurrency
 
-Setiap `target` (`fp`, `frista`) memiliki instance bot sendiri dengan `abort` flag independen. Artinya:
+Setiap `target` (`fp`, `frista`) memiliki instance bot sendiri dengan `abort` flag independen:
 
-- `target=fp` sedang scan dan `target=frista` di-trigger → keduanya jalan paralel.
-- `action=close` untuk `target=fp` hanya men-set abort flag untuk instance FP, tidak menggangu FRISTA.
-
-## Observasi Koordinat FRISTA
-
-Bot FRISTA perlu koordinat klik untuk: field username, field password, tombol login, input NIK/No Kartu, dan tombol trigger face recognition. Koordinat disimpan di `.env` (bukan hardcode) supaya teknisi RS bisa tweak tanpa edit kode.
-
-### Cara 1: Calibration Mode (Recommended)
-
-Gunakan action `calibrate` untuk menentukan koordinat secara interaktif:
-
-```bash
-curl -X POST http://127.0.0.1:3684/ \
-  -H "Content-Type: application/json" \
-  -d '{"action":"calibrate","target":"frista"}'
-```
-
-**Cara kerja:**
-1. Bot membuka FRISTA (kalau belum)
-2. Untuk setiap field, bot minta user gerakkan mouse ke posisi field
-3. User berhenti diam ~1 detik
-4. Bot otomatis merekam posisi dan menghitung offset
-5. Setelah selesai, bot return semua koordinat + menampilkan di log
-
-**Response:**
-```json
-{
-  "message": "OK",
-  "offsets": {
-    "USERNAME_FIELD": { "x": 120, "y": 200 },
-    "PASSWORD_FIELD": { "x": 120, "y": 250 },
-    "LOGIN_BUTTON": { "x": 180, "y": 310 },
-    "CARD_INPUT": { "x": 150, "y": 400 },
-    "SCAN_BUTTON": { "x": 200, "y": 500 }
-  }
-}
-```
-
-**Langkah selanjutnya:**
-1. Copy nilai dari response/log ke file `.env`
-2. Jalankan `test_load` untuk verifikasi: `curl -X POST http://127.0.0.1:3684/ -H "Content-Type: application/json" -d '{"action":"test_load","target":"frista"}'`
-
-### Cara 2: AutoIt Window Info Tool (Manual)
-
-1. **Download & install** [AutoIt full installer](https://www.autoitscript.com/site/autoit/downloads/) (~30MB). Pilih "Full Installation" supaya dapat `Au3Info.exe`.
-2. **Jalankan** `C:\Program Files (x86)\AutoIt3\Au3Info.exe`
-3. **Buka FRISTA** manual dan login (jangan tutup)
-4. **Drag Finder Tool** (icon kotak-kecil) dari Au3Info ke field/button manapun
-
-### Yang Dicatat
-
-Di tab **Mouse** Au3Info, lihat bagian "Position relative to window" → catat X dan Y. Di tab **Control**, catat juga `ClassnameNN` (mis. `Edit1`) untuk robustness (future improvement).
-
-### Field yang Diperlukan
-
-| Field (di .env) | Fungsi |
-|---|---|
-| `FRISTA_OFFSETS_USERNAME_FIELD_X/Y` | Klik field username di layar login |
-| `FRISTA_OFFSETS_PASSWORD_FIELD_X/Y` | Klik field password |
-| `FRISTA_OFFSETS_LOGIN_BUTTON_X/Y` | Klik tombol "Login" |
-| `FRISTA_OFFSETS_CARD_INPUT_X/Y` | Klik field NIK/No Kartu setelah login |
-| `FRISTA_OFFSETS_SCAN_BUTTON_X/Y` | Klik tombol trigger face recognition |
-
-### Workflow
-
-1. Drag Finder ke field username → catat X,Y → tulis ke `.env` (ganti `0` dengan nilai asli)
-2. Ulangi untuk field/button lainnya
-3. `pnpm dev` → `curl -X POST http://127.0.0.1:3684/ -H "Content-Type: application/json" -d '{"action":"test_load","target":"frista"}'`
-4. Amati FRISTA: apakah terbuka, kredensial terisi, lalu tertutup?
-5. Kalau ada yang miss, cek `logs/app.log` untuk konfirmasi koordinat yang dipakai bot
-6. Kalau error, screenshot tersimpan otomatis di `logs/errors/<timestamp>-frista.png` (best-effort via PowerShell + .NET)
-
-### Catatan
-
-- **DPI scaling harus 100%** di Windows Display Settings, atau koordinat akan meleset proporsional dengan scale factor
-- Field `0/0` di `.env` akan di-skip dengan warning — tidak crash
-- Screenshot di-capture via PowerShell (`Add-Type` + `System.Drawing`) sebagai fallback kalau library `node-autoit-koffi` tidak expose `screenshot`. Mengambil **seluruh layar** (bukan crop ke window).
+- `target=fp` sedang scan dan `target=frista` di-trigger → keduanya jalan paralel
+- `action=close` untuk `target=fp` hanya men-stop instance FP, tidak mengganggu FRISTA
 
 ## Struktur Project
 
@@ -274,13 +283,14 @@ apm-jkn/
 │   ├── errors.js          # AppError & subclass
 │   ├── server.js          # HTTP server, request validation
 │   └── bot/
-│       ├── index.js       # dispatcher
-│       ├── fp.js          # handler Aplikasi Sidik Jari
-│       ├── frista.js      # handler FRISTA (stub)
-│       └── helpers.js     # delay, ensureWindow, forceClose
+│       ├── index.js       # dispatcher (target → handler → action)
+│       ├── fp.js          # handler Aplikasi Sidik Jari (keyboard-only)
+│       ├── frista.js      # handler FRISTA (keyboard-only)
+│       └── helpers.js     # delay, ensureWindow, forceClose, dll
 ├── test/
 │   └── smoke.sh           # curl-based smoke test
 ├── logs/                  # log rotation output (auto-generated)
+├── config.conf            # konfigurasi FRISTA (camera_id, API endpoint)
 ├── .env                   # konfigurasi lokal (TIDAK di-commit)
 ├── .env.example           # template konfigurasi
 ├── eslint.config.js       # ESLint v9 flat config
@@ -288,7 +298,7 @@ apm-jkn/
 ├── package.json
 ├── pnpm-lock.yaml
 ├── pnpm-workspace.yaml    # konfigurasi pnpm (allowBuilds)
-├── install.ps1            # installer Windows
+├── install.ps1            # installer Windows (otentikasi Administrator)
 ├── pm2-start.bat          # resurrect PM2 saat startup
 └── README.md
 ```
@@ -296,10 +306,10 @@ apm-jkn/
 ## Development
 
 ```bash
-# Install deps
+# Install dependencies
 pnpm install
 
-# Run dengan hot-reload
+# Run dengan hot-reload (development)
 pnpm dev
 
 # Lint
@@ -307,66 +317,59 @@ pnpm lint
 
 # Format
 pnpm format
-
-# Smoke test (server harus sudah berjalan)
-pnpm smoke
 ```
 
-### Menambah Target Baru (mis. Bridging VClaim)
+### Menambah Target Baru
 
-1. Tambahkan konfigurasi di `src/config.js` (schema & loader)
+1. Tambahkan konfigurasi di `src/config.js`
 2. Tambah env block di `.env` & `.env.example`
 3. Buat `src/bot/<target>.js` dengan export `{ testLoad, scan, close, hide }`
-4. Daftarkan di `src/bot/index.js` (`handlers = { fp, frista, vclaim }`)
+4. Daftarkan di `src/bot/index.js`
 
 ## Troubleshooting
 
 ### `ConfigError: Konfigurasi .env tidak valid`
 
-Periksa file `.env`. Variabel wajib hilang atau format salah. Lihat pesan error spesifik dari zod (mis. `targets.fp.WIN_TITLE: String must contain at least 1 character(s)`).
-
-### `Error: Cannot find module 'node-autoit-koffi'`
-
-Jalankan `pnpm install` lagi. Modul ini butuh build script native — pastikan `pnpm-workspace.yaml` punya:
-```yaml
-allowBuilds:
-  koffi: true
-  ref-napi: true
-```
+Periksa file `.env`. Variabel wajib hilang atau format salah.
 
 ### `EADDRINUSE: address already in use :::3684`
 
-Port sudah dipakai. Cek:
 ```powershell
 netstat -ano | findstr :3684
 taskkill /PID <pid> /F
 ```
 
-Atau ubah `SERVER_PORT` di `.env`.
-
 ### Window Aplikasi tidak ditemukan
 
-- Pastikan `FP_WIN_TITLE` di `.env` cocok dengan judul window tepat (case-sensitive)
-- Cek via **Window Spy** (tool bawaan AutoIt) atau Task Manager → Details → buka aplikasi
-- Untuk Windows 10/11 dengan DPI scaling,judul window kadang beda — verifikasi manual
+- Pastikan `FP_WIN_TITLE` / `FRISTA_WIN_TITLE` cocok dengan judul window (case-sensitive)
+- Cek via Task Manager → Details → lihat judul window
 
 ### Service tidak start saat boot
 
-Cek PM2 startup:
 ```powershell
+# Cek status
 pm2 status
+
+# Simpan ulang process list
 pm2 save
-pm2-startup    # akan print instruksi setup
+
+# Cek file startup
+Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\pm2-startup.bat"
 ```
 
-File `pm2-startup.bat` di Startup folder menjalankan `pm2 resurrect` saat Windows boot.
+### Node.js tidak ditemukan
+
+```powershell
+# Refresh env variables
+$env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
+```
+
+### FRISTA tidak auto-login
+
+- Pastikan Tab order di FRISTA: username → password → login button
+- Login submit pakai **Space** (bukan Enter)
+- Cek `pm2 logs apm-jkn-bot` untuk detail error
 
 ## Lisensi
 
 MIT — lihat [LICENSE](./LICENSE).
-
-## Kredit
-
-- [`node-autoit-koffi`](https://www.npmjs.com/package/node-autoit-koffi) — binding AutoIt untuk Node.js, dipakai untuk simulasi keyboard/mouse ke aplikasi Windows.
-- [zod](https://zod.dev/) — validasi runtime.
-- [winston](https://github.com/winstonjs/winston) — logging.

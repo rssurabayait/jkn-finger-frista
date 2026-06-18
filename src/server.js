@@ -1,5 +1,8 @@
 //@ts-check
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { z } from 'zod';
 import { config } from './config.js';
 import { logger } from './logger.js';
@@ -7,6 +10,8 @@ import { AppError, ValidationError } from './errors.js';
 import { handle } from './bot/index.js';
 
 const HOST = '127.0.0.1';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
 
 const requestSchema = z
 	.object({
@@ -86,7 +91,7 @@ const server = createServer(async (req, res) => {
 		if (req.method === 'GET' && url.pathname === '/') {
 			return json(res, 200, {
 				name: 'apm-jkn-bot',
-				version: process.env.npm_package_version || '0.0.0',
+				version: pkg.version,
 				message: 'Layanan APM JKN siap. Kirim POST untuk trigger aksi.',
 				targets: ['fp', 'frista'],
 				actions: ['scan', 'test_load', 'close', 'hide']
