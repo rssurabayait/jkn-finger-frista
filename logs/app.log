@@ -1,0 +1,18 @@
+[2026-06-18 11:33:44.508] error: Konfigurasi .env tidak valid:
+  - SERVER_PORT: Invalid input
+  - targets.fp.WIN_TITLE: Required
+  - targets.fp.INS_PATH: Required
+  - targets.frista.WIN_TITLE: Required
+  - targets.frista.INS_PATH: Required
+[2026-06-18 11:47:35.803] error: Konfigurasi .env tidak valid:
+  - SERVER_PORT: Invalid input
+  - targets.fp.WIN_TITLE: Required
+  - targets.fp.INS_PATH: Required
+  - targets.frista.WIN_TITLE: Required
+  - targets.frista.INS_PATH: Required
+[2026-06-18 11:47:43.643] error: Konfigurasi .env tidak valid:
+  - SERVER_PORT: Invalid input
+  - targets.fp.WIN_TITLE: Required
+  - targets.fp.INS_PATH: Required
+  - targets.frista.WIN_TITLE: Required
+  - targets.frista.INS_PATH: Required
