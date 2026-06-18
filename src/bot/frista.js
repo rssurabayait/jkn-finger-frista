@@ -1,6 +1,7 @@
 //@ts-check
 import bot from 'node-autoit-koffi';
 import { logger } from '../logger.js';
+import { config } from '../config.js';
 import { BotError } from '../errors.js';
 import { delay, ensureWindow, forceClose } from './helpers.js';
 
@@ -103,14 +104,31 @@ export async function close(cfg, instance) {
 }
 
 /**
- * No-op untuk FRISTA.
- * @param {TargetConfig} _cfg
+ * Sembunyikan window FRISTA — clear input, toggle on-top agar SIMRS kembali fokus.
+ * @param {TargetConfig} cfg
  * @param {{ abort: boolean }} instance
  */
-export async function hide(_cfg, instance) {
+export async function hide(cfg, instance) {
 	if (instance.abort) return;
-	void _cfg;
-	logger.info('frista hide (no-op)');
+	await bot.send('^a{BACKSPACE}');
+	const simrs = config.SIMRS_WIN_TITLE;
+	if (simrs) {
+		try {
+			await bot.winSetOnTop(cfg.WIN_TITLE, '', 1);
+			await bot.winSetOnTop(simrs, '', 1);
+			await bot.winSetOnTop(cfg.WIN_TITLE, '', 0);
+			await bot.winSetOnTop(simrs, '', 0);
+		} catch {
+			// ignore
+		}
+	} else {
+		try {
+			await bot.winSetOnTop(cfg.WIN_TITLE, '', 0);
+		} catch {
+			// ignore
+		}
+	}
+	logger.info('frista hide selesai');
 }
 
 export const frista = { testLoad, scan, close, hide };
