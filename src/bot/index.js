@@ -30,7 +30,7 @@ function getInstance(target) {
  */
 export async function handle(params) {
 	const target = params.target || 'fp';
-	const action = params.action;
+	const action = /** @type {string} */ (params.action);
 
 	if (!ACTIONS.includes(/** @type {any} */ (action))) {
 		throw new ValidationError(`Unknown action: ${action}. Pilihan: ${ACTIONS.join(', ')}`);
@@ -46,22 +46,24 @@ export async function handle(params) {
 
 	const targetKey = /** @type {'fp'|'frista'} */ (target);
 	const module = handlers[targetKey];
+	// action pasti defined setelah validasi di atas
+	const actionValue = /** @type {string} */ (action);
 	// Map action snake_case → camelCase (test_load → testLoad)
-	const camelAction = action.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+	const camelAction = actionValue.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 	const fn = module[/** @type {keyof typeof module} */ (/** @type {any} */ (camelAction))];
 	if (typeof fn !== 'function') {
-		throw new BotError(`Handler untuk target=${target} action=${action} tidak ada`);
+		throw new BotError(`Handler untuk target=${target} action=${actionValue} tidak ada`);
 	}
 
 	const instance = getInstance(target);
 	const startTime = Date.now();
-	logger.info(`dispatch: target=${target} action=${action} starting`);
+	logger.info(`dispatch: target=${target} action=${actionValue} starting`);
 
 	try {
 		// Cast params ke any: schema sudah validasi di server.js, di sini kita trust.
 		// Per-target handler bisa strict sesuai kebutuhannya masing-masing.
 		const result = await fn(targetCfg, instance, /** @type {any} */ (params));
-		logger.info(`dispatch: target=${target} action=${action} selesai (${Date.now() - startTime}ms)`);
+		logger.info(`dispatch: target=${target} action=${actionValue} selesai (${Date.now() - startTime}ms)`);
 		return result;
 	} catch (/** @type {unknown} */ e) {
 		const duration = Date.now() - startTime;
@@ -73,7 +75,7 @@ export async function handle(params) {
 				logger.warn(`captureErrorScreenshot gagal: ${formatError(capErr)}`);
 			}
 		}
-		logger.error(`dispatch: target=${target} action=${action} GAGAL setelah ${duration}ms: ${e instanceof Error ? e.message : String(e)}`);
+		logger.error(`dispatch: target=${target} action=${actionValue} GAGAL setelah ${duration}ms: ${e instanceof Error ? e.message : String(e)}`);
 		throw e;
 	}
 }
