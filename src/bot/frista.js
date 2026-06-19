@@ -9,6 +9,8 @@ import { delay, ensureWindow, forceClose } from './helpers.js';
 
 const LOGIN_SETTLE_MS = 3000;
 const POST_LOGIN_DELAY_MS = 2000;
+const NIK_CLICK_X = 1316;
+const NIK_CLICK_Y = 428;
 
 /**
  * Isi kredensial via keyboard (Tab navigation, tanpa mouse).
@@ -78,6 +80,11 @@ export async function scan(cfg, instance, params) {
 	const title = cfg.WIN_TITLE;
 
 	if (params.card_number) {
+		// Klik field NIK (Tkinter: controlClick/controlFocus tidak work)
+		bot.mouseClick('left', NIK_CLICK_X, NIK_CLICK_Y);
+		await delay(300);
+		bot.winActivate(title);
+		await delay(300);
 		await bot.send('^a{BACKSPACE}');
 		await bot.send(params.card_number);
 		await delay(300);
@@ -107,14 +114,13 @@ export async function close(cfg, instance) {
 }
 
 /**
- * Sembunyikan window FRISTA — clear input, toggle on-top agar SIMRS kembali fokus.
+ * Sembunyikan window FRISTA — toggle on-top agar SIMRS kembali fokus.
  * @param {TargetConfig} cfg
  * @param {{ abort: boolean }} instance
  */
 export async function hide(cfg, instance) {
 	if (instance.abort) return;
 	logger.info('[frista] hide starting');
-	await bot.send('^a{BACKSPACE}');
 	const simrs = config.SIMRS_WIN_TITLE;
 	if (simrs) {
 		try {
