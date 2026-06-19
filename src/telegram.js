@@ -48,6 +48,10 @@ async function safeSend(text) {
 		logger.warn(`safeSend dilewati: bot belum diinisialisasi. Pesan yang tidak terkirim: ${text.slice(0, 100)}`);
 		return;
 	}
+	// Cegah infinite loop: jangan kirim pesan yang berisi error/warn Telegram
+	if (text.includes('Telegram ') || text.includes('ETELEGRAM')) {
+		return;
+	}
 	try {
 		const result = await bot.sendMessage(config.TELEGRAM_CHAT_ID, text, { parse_mode: 'HTML' });
 		logger.debug(`Telegram sent message_id=${result.message_id}: ${text.slice(0, 80)}`);
@@ -183,7 +187,16 @@ export const telegram = {
 			});
 
 			bot.on('polling_error', (err) => {
-				logger.warn(`Telegram polling error: ${err.message}`);
+				// 409 Conflict: another polling session active — stop & retry after 30s
+				if (err.message.includes('409') || err.message.includes('Conflict')) {
+					logger.warn('Telegram 409 Conflict — stopping polling, retry in 30s');
+					bot?.stopPolling();
+					setTimeout(() => {
+						bot?.startPolling();
+					}, 30_000);
+				} else {
+					logger.warn(`Telegram polling error: ${err.message}`);
+				}
 			});
 
 			bot.on('error', (err) => {
